@@ -1,0 +1,655 @@
+---
+title: "LoanAnalysis"
+author: "Viren Pherwani"
+date: "February 26, 2017"
+output: html_document
+---
+
+# Analysis of loans
+The purpose of the effort is to perform elementary data analysis. I want to identify loans that have not been paid off as expected, and how this status is related to other variables present. The dataset used is the 'Loan data from Prosper' in the Udacity data sets.
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2) 
+library(knitr)
+library(dplyr)
+```
+
+## Initial set of variables
+This is a list of variables that are present in the dataset. Since there are 81 variables here, I plan to select 10-15 of these variables. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+vardefs <- read.csv("vardefs.csv")
+vardefs$Variable
+```
+
+## Variable selection
+The initial set of fields I'm selecting are
+"Term","LoanStatus","BorrowerAPR","ListingCategory","Occupation","IsBorrowerHomeowner","CreditScoreRangeLower","CurrentCreditLines","DelinquenciesLast7Years","DebtToIncomeRatio","StatedMonthlyIncome","LoanOriginalAmount","LoanOriginationQuarter" and "BankcardUtilization".
+My intent is to identify and select 10-15 variables that are fairly independent, but important to the analysis.
+After initial investigation, I may modify or remove some of these fields. The criteria I used to select these fields are
+1. Documentation of the field is clear 
+2. Fields seem relevant to the 'LoanStatus' field.
+3. The fields are relatively independent of each other.
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+loanset <- read.csv("prosperLoanData.csv")
+varlist <- c("Term","LoanStatus","BorrowerAPR","ListingCategory","Occupation",
+             "IsBorrowerHomeowner","CreditScoreRangeLower","CurrentCreditLines",
+             "DelinquenciesLast7Years","DebtToIncomeRatio",
+             "StatedMonthlyIncome","LoanOriginalAmount",
+             "LoanOriginationQuarter","BankcardUtilization")
+mySet <- loanset[varlist]
+```
+
+## Subset selection
+I read in the data and create a subset with the selected columns. I then get summary information for each of the variables in the set
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ncol(mySet)
+nrow(mySet)
+str(mySet)
+summary(mySet)
+```
+
+The following columns can be converted to factors - Term, Listing category. Also the loan origination quarter may need to be modified so that they can be ordered chronologically.
+
+## Univariate plots
+As a first step I'll create histograms for the variables listed. For 'Listing categories', which is a numerical column, the categories are : 0 - Not Available, 1 - Debt Consolidation, 2 - Home Improvement, 3 - Business, 4 - Personal Loan, 5 - Student Use, 6 - Auto, 7- Other, 8 - Baby&Adoption, 9 - Boat, 10 - Cosmetic Procedure, 11 - Engagement Ring, 12 - Green Loans, 13 - Household Expenses, 14 - Large Purchases, 15 - Medical/Dental, 16 - Motorcycle, 17 - RV, 18 - Taxes, 19 - Vacation, 20 - Wedding Loans
+
+```{r echo=FALSE}
+qplot(data=mySet, x=LoanStatus, fill=I("orange"), color=I("black")) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1),legend.position='none')
+table(mySet$LoanStatus)
+```
+
+### Loan Status : 
+From the histogram and the table, about 32% of the loans are completed or in final payments. 16% have not been successful outcome, i.e. either chargedoff, defaulted or payments are past due. So, 33% of all loans that are not current have failed. This is a large percentage and needs to be investigated.
+It will be easier if a new column is created which simplifies the outcomes. All chargedoff, defaulted or past due loans will be marked as failed, Completed loans will be marked as successful and Current loans will be marked as ongoing.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=10}
+qplot(data=mySet, x=Occupation, fill=I("orange"), color=I("black")) + 
+      coord_flip() + theme(legend.position='none')
+table(mySet$Occupation)
+```
+
+###Occupation : 
+
+The field Occupation has many entries. The professions with the largest count of loans are 'Other' and 'Professional'. Also, these values are sometimes ambiguous. For example the fields 'Professional' and 'Principal' are not clear on the exact field. With so many values, an analysis of this field may not provide much value. Going forward, this field will not be checked.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=ListingCategory, fill=I("orange"), color=I("black")) + 
+      coord_flip() + theme(legend.position='none')
+table(mySet$ListingCategory)
+```
+
+###Listing Category : 
+This is a numeric field with these categories : 0 - Not Available, 1 - Debt Consolidation, 2 - Home Improvement, 3 - Business, 4 - Personal Loan, 5 - Student Use, 6 - Auto, 7- Other, 8 - Baby&Adoption, 9 - Boat, 10 - Cosmetic Procedure, 11 - Engagement Ring, 12 - Green Loans, 13 - Household Expenses, 14 - Large Purchases, 15 - Medical/Dental, 16 - Motorcycle, 17 - RV, 18 - Taxes, 19 - Vacation, 20 - Wedding Loans
+
+It would help to convert this field to a factor.From the histogram, the most common categories are 'Debt Consolidation'(Close to 50%),'Not Available'(15%) or 'Other'(10%). Not sure if the applicants were not sure of the purpose of the loan, or didnt care to fill the field accurately. The field may not be very helpful, but it will be interesting to check the failure rate for the various categories.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=BorrowerAPR, fill=I("orange"), color=I("black"),
+      binwidth=0.01) +
+      theme(legend.position='none')
+summary(mySet$BorrowerAPR)
+```
+
+###Borrower APR : 
+The Borrower APR varies normally from a minimum of 0.01 to a max of 0.5. The peak count is at 0.2. There seems to be a high count of about 6000 for the APR of 0.36, which breaks out of the normal curve.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=IsBorrowerHomeowner, fill=I("orange"), color=I("black")) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1), legend.position='none')
+table(mySet$IsBorrowerHomeowner)
+```
+
+###Homeowner :
+Count of homeowners and renters are about equal, close to 56000 each.It will be interesting to check the loan failure rate for these two categories, in order to check on any differences.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=CreditScoreRangeLower, fill=I("orange"), color=I("black"),
+      xlim=c(400,880)) +
+      theme(legend.position='none')
+summary(mySet$CreditScoreRangeLower)
+```
+
+###Credit Scores :
+Credit scores range from 400 at the low end to 880. It follows a bell curve, with some gaps.It will be interesting to check if there is any corelation between the credit scores and the bad loans. Also, since credit scores are based on some of the other fields such as 'Salary', it will be helpful to check the corelation between them.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=CurrentCreditLines, fill=I("orange"), color=I("black"),
+      xlim=c(0,40)) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1),legend.position='none')
+summary(mySet$CurrentCreditLines)
+```
+
+###Current credit lines :
+All borrowers seem to have credit lines. The range is from 1 to 40 credit lines. The curve is positively skewed. i.e. There are more borrowers with higher number of credit lines. It will be interesting to check if those with higher number of credit lines can pay off he loans in a timely manner.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=DelinquenciesLast7Years, fill=I("orange"), color=I("black"), 
+      xlim=c(0,50), ylim=c(0,6000), binwidth=1) +
+      theme(legend.position='none')
+summary(mySet$DelinquenciesLast7Years)
+```
+
+###Delinquencies : 
+As expected the curve shows a decrease in count as the number of delinquencies increase. There are 4000 borrowers with zero deliquency. Maximum number of delinquencies is 49.I'd like to check if borrowers with more delinquencies have higher loan repayment failures.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=DebtToIncomeRatio, fill=I("orange"), color=I("black"),
+      xlim=c(0,1.25)) +
+      theme(legend.position='none')
+summary(mySet$DebtToIncomeRatio)
+```
+
+###Debt to income ratio :
+The debt to income ratio has a peak count at about 0.18. The maximum count is at a value of 0.12. I'd expect those with a lower debtoincome ratio to be better at paying off the loan, and would expect them to have a better credit score.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=LoanOriginalAmount, fill=I("orange"), color=I("black"),
+      binwidth=0.02) + 
+      scale_x_log10() + theme(legend.position='none')
+summary(mySet$LoanOriginalAmount)
+```
+
+###Loan Original amount :
+I plotted this in a log scale since there were many borrowers with loan amounts less than 10,000. The graph shows the peak count of loans around 5000 and maximum values at 35000. It will be interesting to check the status of loans by the amount of the loan.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=StatedMonthlyIncome, fill=I("orange"), color=I("black"),
+      xlim=c(0,25000)) +
+      theme(legend.position='none')
+summary(mySet$StatedMonthlyIncome)
+```
+
+###Stated Monthly income :
+This is a positively skewed curve, with a max count at about $4000. I expect credit scores to be directly correlated to the monthly income. I'm not sure if some of the higher figures are accurate. i.e. max value of monthly income is stated as 1750003.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=LoanOriginationQuarter, fill=I("orange"), 
+      color=I("black")) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1),legend.position='none')
+```
+
+###Loan Origination quarter :
+The loans origination date ranges from 2006-2013. The graph is not chronologically sorted. It will help to modify this field for that purpose. Also, if the results for 2006-2008 are starkly different from 2009-2013 due to pre and post financial crisis scenario, it may help to separate out the data.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=BankcardUtilization, fill=I("orange"), color=I("black"),
+      xlim=c(0,1.25)) +
+     theme(legend.position='none')
+summary(mySet$BankcardUtilization)
+table(mySet$BankcardUtilization)
+```
+
+###Bankcard Utilization
+
+Bank card utilzation count increases steadily from 2000 with 0.05 utilization to 7500 with 1.0 utilization. Intermittently, some values such as 0.01, 0.16, 0.28 have a higher count. There also seem to be some erroneous values greater than 1. 
+
+## Data Changes
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+CategoryLabel <- c("Not Available","Debt Consolidation","Home Improvement",
+                   "Business","Personal Loan","Student Use","Auto","Other",
+                   "Baby&Adoption","Boat","Cosmetic Procedure",
+                   "Engagement Ring","Green Loans","Household Expenses",
+                   "Large Purchases", "Medical/Dental","Motorcycle","RV",
+                   "Taxes","Vacation","Wedding Loans")
+CategoryLevel <- seq(0,20,1)
+mySet$ListingCategory <- factor(mySet$ListingCategory, levels=CategoryLevel, 
+                                labels=CategoryLabel)
+```
+
+###Listing Category
+I added Labels to the listing categories to enable convenient analysis of graphs.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mySet$Term <- factor(mySet$Term, levels=c(12,36,60), ordered=TRUE)
+
+```
+
+###Term
+I changed the term field to a factor. This will improve the display.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mySet <- subset(mySet, BankcardUtilization >= 0 & BankcardUtilization <= 1.0)
+```
+
+### Bank Card utilization
+I removed entries from the set that have invalid values for Bank Card Utilization
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+loanquarter <- substr(mySet$LoanOriginationQuarter, 1,2)
+loanYear <- substr(mySet$LoanOriginationQuarter, 4,7)
+mySet$LoanOriginationQuarter <- paste(loanYear,loanquarter,sep=" ")
+qplot(data=mySet, x=LoanOriginationQuarter, fill=I("orange"), 
+      color=I("black")) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1), legend.position='none')
+```
+
+### Loan Origination Quarter
+I changed the Loan origination guarter to the format '2012 Q3' instead of 'Q3 2012'. This will help us order the graphs chronologically. The graph seems to show a dip in the count of loans beginning 2008 Q2 to 2011 Q4. This could be due to the impact of the 2008 financial crisis.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mySet$LoanResult <- ifelse(mySet$LoanStatus %in% 
+                             c("Completed","FinalPaymentInProgress"),
+                           "Good", ifelse(mySet$LoanStatus == "Current", 
+                                          "Ongoing", "Bad"))
+head(mySet$LoanResult)
+```
+
+### Loan Result
+I created a new column 'Loan Result' that simplifies the Loan Status. It has one of the three values - 'Bad', Good' and 'Ongoing'. All completed and nearly completed loans are good. Loans other that this and current are 'bad'.
+
+##Bivariate and Multivariate plots
+Next I recreate many of the previous histogram plots, with the results colored as 'LoanResult'
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=LoanResult, fill=I("orange"), color=I("black")) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1),legend.position='none')
+table(mySet$LoanResult)
+```
+
+###Loan Result
+From the total number of loans, about 53000 are ongoing, 33000 have completed successfully and 15000 have failed. i.e. the overall ratio of bad to good loans is 0.46 and the ratio of bad to loans that are not current is 0.32. I plan to focus on the factors which tip the ratio towards bad loans.
+
+Another bivariate plot is the comparison of 'debt to income ratio' with the LoanResult
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=LoanResult, y=DebtToIncomeRatio, geom="boxplot") + 
+      ylim(0.0,1.0) + theme(axis.text.x=element_text(angle=90, hjust=1))
+by(mySet$DebtToIncomeRatio, mySet$LoanResult, summary)
+```
+
+###DebtToIncomeRatio
+The summary data shows median DebttoIncome ratio of 0.23 for bad loans Vs 0.20 for the good loans. However there are a large number of outliers in both cases. I'm cannot consider this result reliable enough to investigate further.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=BorrowerAPR, color=LoanResult, binwidth=0.01, 
+      geom="freqpoly") 
+```
+
+###BorrowerAPR
+From the plot, it seems the count of bad loans increases steadily with increase in APR, and then spikes up at an 0.36 APR. It may help to plot bad loans as a percentage of total loans.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=ListingCategory, fill=mySet$LoanResult) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1))
+by(mySet$LoanResult, mySet$ListingCategory, table)
+```
+
+###Listing Category
+The highest count of bad loans is for 'Debt consolidation' - About 5500. However, it is not clear which Listing Category has the highest percentage of bad loans.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(data=mySet, aes(x=IsBorrowerHomeowner, fill=LoanResult)) + 
+      geom_bar(position="dodge") +
+      theme(axis.text.x=element_text(angle=90, hjust=1))
+by(mySet$LoanResult,mySet$IsBorrowerHomeowner, table)
+```
+
+###Homeowner
+Both Homeowners and renters seem to have approximately the same counts for successful and failed loans. It may not help to investigate this field. Will not continue with this factor further.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=CreditScoreRangeLower, color=LoanResult, 
+      xlim=c(400,880), geom="freqpoly")
+by(mySet$LoanResult,mySet$CreditScoreRangeLower, table)
+```
+
+###Credit Score
+from the histogram, the distribution of bad loans, good loans and ongoing loans seems to be close to normal. The 'Bad loans curve' is skewed to the left, and that for good loans and Ongoing loans is skewed to the right. i.e. borrowers with lower credit scores seem have more failed loans, and those with higher credit scores seem to have more successful loan payback.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=CurrentCreditLines, color=LoanResult, 
+      xlim=c(0,40),binwidth=1, geom="freqpoly") 
+by(mySet$LoanResult,mySet$CurrentCreditLines, table)
+```
+
+###Current credit lines
+The ratio of bad to good loans is higher at the extremes, i.e. below credit lines of 3 and higher than credit lines of 30. Between 3-30 credit lines, the count of bad loans is flat seems to be much lower than that of the good loans.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=DelinquenciesLast7Years, color=LoanResult, xlim=c(0,50),
+      ylim=c(0,3500), binwidth=1, geom="freqpoly")
+#by(mySet$LoanResult,mySet$DelinquenciesLast7Years, table)
+```
+
+###Delinquencies
+The number of Bad loans to Good loans is higher when the number of delinquencies is low. However, from the graph the ratio of bad to good loan count seems to increase as the number of delinquencies increase.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=DebtToIncomeRatio, color=LoanResult, xlim=c(0,0.8), 
+      binwidth=0.02, geom="freqpoly")
+#by(mySet$LoanResult,mySet$DebtToIncomeRatio, table)
+```
+
+###Debt to income ratio
+The ratio of bad to good loans is low when debt to Income ratio is low. The ratio seems to increase after DebttoIncomeRatio exceeds 0.3.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=LoanOriginalAmount, color=LoanResult, geom="freqpoly",
+      xlim=c(0,25000),binwidth=400) 
+#by(mySet$LoanResult,mySet$LoanOriginalAmount, table)
+```
+
+###Loan Original amount
+Most of the loans are below the value of 10000. Also, the ratio of bad to good loans is low when the loan amount is below 10,000. As the loan amount increases beyond this value the ratio increases.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=StatedMonthlyIncome, color=LoanResult, geom="freqpoly",
+      binwidth=0.02) +
+      scale_x_log10() + 
+      coord_trans(limx=c(500,25000))
+#by(mySet$LoanResult,mySet$StatedMonthlyIncome, table)
+```
+
+###Stated Monthly income
+Most of the loans are located in the mid range of monthly income - between 3000 & 8000. It is not clear how the ratio changes across the range of monthly income. Also, creating the table of loan results for each value of monthly income does not helpful, since there are too many entries.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=LoanOriginationQuarter, fill=LoanResult) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1))
+by(mySet$LoanResult,mySet$LoanOriginationQuarter, table)
+```
+
+###Loan Origination quarter
+The ratio of bad to good loans seem to be high prior to 2008 Q3. The number of loans and the ratio dropped since. I'm not adding any comments on the ratio in 2012, since the ongoing loans may be close to completion, so the good to bad ratio may not be valid for these years.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data=mySet, x=BankcardUtilization, color=LoanResult, geom="freqpoly",
+      binwidth=0.05) 
+```
+
+###Bankcard Utilization
+The ratio  seems to be fairly steady, except for the BankCardUtilization value of 1.0, where it is high. Perhaps this value indicates borrowers with no bank cards. For this field, I did not output the table,since it would not be useful.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(data=mySet, aes(x=Term, fill=LoanResult)) + geom_bar(position="dodge")
+by(mySet$LoanResult,mySet$Term, table)
+```
+
+### Loan Term
+Loan Term- Majority of the loans have a 36 month term. The bad to good loan ratio is lower for the 12 month term and 36 month term as compared to the 60 month term.
+
+##Ratios evaluation
+Based on the initial histograms, I plan to investigate the following variables further 
+1. Stated Monthly Income
+2. Loan Original Amount
+3. DelinquenciesLast7Years
+4. Current Credit Lines
+5. CreditScoreRangeLower
+6. ListingCategory
+7. Borrower APR
+8. DebtToIncomeRatio
+
+I plan to plot each of these variables against the ratio of bad to good loans. If there seems to be a corelation, I plan to evaluate it.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+myFactorSet <- data.frame(mySet$ListingCategory, mySet$LoanResult)
+myFactorSet$CreditScore <- factor(round(mySet$CreditScoreRangeLower/20)*20)
+myFactorSet$BorrowerAPR <- factor(round(mySet$BorrowerAPR, 2))
+myFactorSet$Income <- factor(round(mySet$StatedMonthlyIncome/100)*100)
+myFactorSet$Delinquencies <- mySet$DelinquenciesLast7Years
+myFactorSet$LoanAmount <- factor(round(mySet$LoanOriginalAmount/500)*500)
+myFactorSet$CreditLines <- mySet$CurrentCreditLines
+myFactorSet$DebtToIncomeRatio <- factor(mySet$DebtToIncomeRatio)
+```
+
+I first convert all columns to factors, in order to group the data using these factors. Values have been rounded, so that the resulting graphs will be reasonably granular.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+myFactorSet <- filter(myFactorSet, mySet.LoanResult != 'Ongoing')
+```
+
+Also, the data is filtered for all loans with a final result, since the final status of an ongoing loan is not known.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+CountsReturnFunc <- function(dframe, columnName) {
+  myGroup <- group_by_(dframe,as.name(columnName))
+  myGroupCount <- summarize(myGroup, completedCount = n())
+  myResultGroup <- group_by_(dframe, as.name(columnName), 
+                             as.name("mySet.LoanResult"))
+  myResultGroupCount <- summarize(myResultGroup, count = n())
+  myGroupJoined <- inner_join(myGroupCount, myResultGroupCount,by=columnName)
+  return(myGroupJoined)
+}
+```
+
+
+###Counts return function
+The function summarizes the total count of loans by the column name in the arguments. It also summarizes this information by Loan Result and column name. That will enable us to get the ratio of bad loans to total loans for each field.
+
+**We now use this function to display ratio of bad loan count to total loans for each of the fields in the frame.**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ListingJoined <- CountsReturnFunc(myFactorSet, "mySet.ListingCategory")
+qplot(data=ListingJoined, x=mySet.ListingCategory, 
+      y=(count/completedCount)*100, color=mySet.LoanResult) + 
+      theme(axis.text.x=element_text(angle=90, hjust=1))
+
+```
+
+###ListingCategory
+The categories with the highest failure rate are 'Green Loans', 'Medical/Dental, 'Household expenses' and 'Baby Adoption'. These categories have a failure rate greater than 37.5%.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+CreditScoreJoined <- CountsReturnFunc(myFactorSet, "CreditScore")
+qplot(data=CreditScoreJoined, x=CreditScore,
+      y=(count/completedCount)*100, color=mySet.LoanResult) 
+```
+
+###Credit Score
+There is a direct corelation between the credit score and percentage of successful loans. And an inverse relation with the percentage of failed loans. The corelation can be investigated further. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+IncomeJoined <- CountsReturnFunc(myFactorSet, "Income")
+qplot(data=subset(IncomeJoined,mySet.LoanResult=="Bad"), x=Income, 
+      y=(count/completedCount)*100, color=mySet.LoanResult) +
+      scale_x_discrete(breaks=seq(0,25000,5000))
+```
+
+###Income
+There are a bunch of outliers, high stated incomes where all loans have been bad.This could be a case of incorrect data. The Failure rate is scattered for high incomes and very low incomes. However for the interval monthy income between 1200-9000, there seems to be a negative corelation between count of loans failed and the income.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+LoanAmountJoined <- CountsReturnFunc(myFactorSet, "LoanAmount")
+qplot(data=subset(LoanAmountJoined,mySet.LoanResult=="Bad"), 
+      x=LoanAmount, y=(count/completedCount)*100, color=mySet.LoanResult) +
+      scale_x_discrete(breaks=seq(0,35000,7000))
+```
+
+###Loan Amount
+The Failure rate seems to increase as the 'Loan Amount' increases. The values are more scattered with increase in Loan Amounts. There is also an outlier for failure rate when the loan value is 21500. I will check on the corelation coefficient for this metric.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+BorrowerAPRJoined <- CountsReturnFunc(myFactorSet, "BorrowerAPR")
+qplot(data=BorrowerAPRJoined, x=BorrowerAPR, 
+      y=(count/completedCount)*100, color=mySet.LoanResult) +
+      scale_x_discrete(breaks=seq(0,0.5,0.05))
+```
+
+###Borrower APR
+This metric seems to have a direct corelation to the failure rate, but only for a specific interval - 0.06 to 0.37. At APR values below 0.06 the failure rate increases. Also, at values higher than 0.37 the failure rate decreases. I'm not sure of the cause here.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+DelinquenciesJoined <- CountsReturnFunc(myFactorSet, "Delinquencies")
+qplot(data=subset(DelinquenciesJoined, mySet.LoanResult=="Bad"), 
+      x=Delinquencies, y=(count/completedCount)*100, color=mySet.LoanResult)
+```
+
+###Delinquencies
+In the case of delinquencies, the failure rate seems to scatter as the number of delinquencies increase. It is not clear if there is a corelation. I plan to check.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+DebtToIncomeRatioJoined <- CountsReturnFunc(myFactorSet, "DebtToIncomeRatio")
+qplot(data=subset(DebtToIncomeRatioJoined, mySet.LoanResult=="Bad"), 
+      x=DebtToIncomeRatio, 
+      y=(count/completedCount)*100, color=mySet.LoanResult) + 
+      scale_x_discrete(breaks=c("0.25","1","4"), labels=c("0.25","1","4"))
+```
+
+###DebtToIncome ratio
+Ignoring an outlier for the value of 0, there seems to be a direct corelation between 'DebtToIncomeRatio' and Failure rate, until the DebtoIncomeRatio value of 0.5. After that, the values scatter. It will help to check the corelation coeff for this.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+CreditLinesJoined <- CountsReturnFunc(myFactorSet, "CreditLines")
+qplot(data=subset(CreditLinesJoined, mySet.LoanResult=="Bad"), 
+      x=CreditLines, y=(count/completedCount)*100, color=mySet.LoanResult)
+```
+
+###Credit Lines
+When the number of credit lines goes beyond 40, the rate of loan failures goes high, beyond 60%. However, there is no direct corelation at values below 40. In as the number of credit lines increases from 0 to 5, the loan failure rate decreases from 40% to 30%. This could possibly be due to young inexperienced borrowers, who are new to loans.
+
+##Corelation
+
+The next step is to calculate corelation values between failure rates and some of the metrics identified in the graphs.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+CorCoeffFunc <- function(dframe, columnName) {
+  dframe[columnName] <- as.numeric(unlist(dframe[columnName]))
+  dframeBad <- subset(dframe, mySet.LoanResult=="Bad")
+  corCoeff <- cor(dframeBad[columnName], 
+                  dframeBad$count/dframeBad$completedCount, use="complete.obs")
+  return (corCoeff)
+}
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+creditScoreCoeff <- CorCoeffFunc(CreditScoreJoined, "CreditScore")
+creditScoreCoeff
+```
+
+CreditScoreCoeff  -0.9932
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+creditLinesCoeff <- CorCoeffFunc(CreditLinesJoined, "CreditLines")
+creditLinesCoeff
+```
+
+CreditLines 0.54
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+BorrowerAPRCoeff <- CorCoeffFunc(BorrowerAPRJoined, "BorrowerAPR")
+BorrowerAPRCoeff
+```
+
+BorrowerAPR 0.700
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+IncomeCoeff <- CorCoeffFunc(IncomeJoined, "Income")
+IncomeCoeff
+```
+
+Income 0.5302
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+LoanAmountCoeff <- CorCoeffFunc(LoanAmountJoined, "LoanAmount")
+LoanAmountCoeff
+```
+
+LoanAmount 0.4963
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+DelinquenciesCoeff <- CorCoeffFunc(DelinquenciesJoined, "Delinquencies")
+DelinquenciesCoeff
+```
+
+Delinquencies 0.5464
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+DebtToIncomeRatioCoeff <- CorCoeffFunc(DebtToIncomeRatioJoined,
+                                       "DebtToIncomeRatio")
+DebtToIncomeRatioCoeff
+```
+
+DebtToIncomeRatio 0.799
+
+## Factor selection
+It seems the most common factors that are well corelated,directly or inversely,  to the Failure rate are Credit Score, DebtToIncomeRatio and BorrowerAPR.
+
+To check on Failures further, I'll plot two relatively independent variables along with the Loan Result. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot (data=subset(mySet,LoanResult!="Ongoing"), 
+        aes(x=LoanOriginalAmount, y=CreditScoreRangeLower)) + 
+      geom_jitter(aes(color=LoanResult),width=0.4) + geom_smooth(se= FALSE) +
+      scale_x_log10() 
+```
+
+### Loan Amount, Credit Score, Loan Result
+The graph shows that loans of amounts higher than 10000 are not approved for borrowers below the credit score of 600. That is a good idea, since the failed loans increase when the credit scores are lower.When the loan amount is low, around $1000 and the credit scores are above 700, there are hardly any failed loans. The count of failed loans reduces as the credit scores get higher, for all loan amounts. The graph has been scaled by log10 on the x axis because there are fewer loans as the loan amount gets higher. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot (data=subset(mySet,LoanResult != "Ongoing"), 
+        aes(x=BorrowerAPR, y=CreditScoreRangeLower)) + 
+      geom_jitter(aes(color=LoanResult), alpha=1/5) + 
+      coord_cartesian(xlim=c(0,0.45), ylim=c(400,900)) 
+```
+
+### APR, Credit Score, Loan Result
+The graph illustrates the advantage of a higher credit score. Lower APRs are only predominantly given to those with higher credit scores. The mostly empty triangle in the bottom left makes this clear. Also, the empty triangle on the upper right shows that those with higher credit score dont accept high APRs for their loans. It is only those with lower credit scores that have to take on high APR loans. Consequently, most failures are for high APR loans(greater than 0.2) and low credit scores. Also, there are few borrowers between credit scores of 500-600. Few applicants in this range get approval for a loan.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot (data=subset(mySet,LoanResult != "Ongoing"), 
+        aes(x=LoanOriginalAmount, y=BorrowerAPR)) + 
+      geom_jitter(aes(color=LoanResult, alpha=1/20), width=0.1) + 
+      coord_cartesian(ylim=c(0,0.45)) + scale_x_log10()
+```
+
+### APR, loan amount, Loan Result
+From the graph, it seems that there are minimal loan failures when the APR is low, i.e. below 0.15. Failures increase with the APR. The count of loans increases with the loan amounts. Largest count of loans is between 5000-10,000. The empty triangle on the upper left shows that loans are not approved or accepted for amounts higher than 100000, when the APR is high (0.3-0.4).
+
+## Final plots and summary
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(data=subset(CreditScoreJoined, mySet.LoanResult!='Good'), aes(x=CreditScore, 
+      y=(count/completedCount)*100, group=1)) + 
+      geom_point(color="red") +
+      geom_line() +
+      geom_smooth(se=FALSE, method="lm") + 
+      labs(title="Credit Score Vs Percentage of failed loans",
+           x="Credit Score", y="Percentage of failed loans")
+```
+
+### Percentage of failed/successful loans by credit score
+The graph indicates the trend of percentage of failed(red) and successful(green) loans as the credit score increases. The trend is linear as indicated by linear interpolation. The corelation coefficient for Credit Score and Ratio of failed loans is -0.9932. The credit score is created by financial agencies using information from the borrowers credit history. It seems they are doing a good job of it for the lenders.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot (data=subset(mySet,LoanResult!="Ongoing"), 
+        aes(x=LoanOriginalAmount, y=CreditScoreRangeLower, color=LoanResult)) + 
+      geom_jitter(alpha=1/5,width=0.4) + 
+      geom_smooth(se=FALSE) +
+      labs(title="CreditScore Vs Loan Amount", 
+           x="Loan Amount", y="Credit Score") + 
+      scale_x_log10(breaks=c(1000,10000,100000))
+```
+
+### Failed and successful loans by credit score and loan amount
+The graph shows higher density of failed loans along the along the lower border and to the right. This indicates the impact of lower credit scores on all the repayment of the loans. At loan amounts higher than 10000, loans are approved only for credit ratings above 600. Even for these loans, the incidence of successful loans increases as the credit rating rises.Fewer loans are approved for borrowers below a rating of 600. The smoothing curve indicates the fact that a higher credit score is required for a larger loan amount.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot (data=subset(mySet,LoanResult != "Ongoing"), aes(x=BorrowerAPR,
+  y=CreditScoreRangeLower, color=LoanResult)) + geom_jitter(alpha=1/5) +
+  geom_smooth(se=FALSE) + 
+  coord_cartesian(xlim=c(0,0.45)) + 
+  labs(title="Success/Failure by Credit Score and APR",
+       x="Borrower APR", y="Credit Score")
+```
+
+### Failed and successful loans by Credit Score and Borrower APR
+The graph shows the failed loans increasing as the credit score decreases and as the APR increases. The density of failed loans is highest at the credit score of 500 and increases with the Borrower APR. Very few borrowers below a credit score of 600 get approved for loans below APR of 0.2.This further decreases their chances of successful repayment. The APRs less than 0.5 can be considered to be outliers. Then the smoothing curve indicates that a higher credit score provides access to loans with lower APR.
+
+
+##Reflections
+The initial step of identifying relevant variables for investigation, is probably the most critical and is a subjective decision. Luckily, some of the variables selected were relevant to the success/failure of the loan.
+Some of the categorical variables evaluated were related to the loan outcome. However, I was not sure how to proceed with the evaluation using these variables. So, all the bivariate and multivariate plots consist of numerical variables. From the multivariate plots, the use of Credit Score is apparent. Banks are using this variable to decide on loan approval and on the Loan APR. The corelation between Credit score and success/failure of loans is high and graphically linear. Other factors such as loan amount and APR are also related to the loan outcome. The next steps would probably be to create a linear regression model using these variables.
